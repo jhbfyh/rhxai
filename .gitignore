@@ -1,0 +1,13 @@
+# 本地环境
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 测试产物
+.playwright-mcp/
+*.log

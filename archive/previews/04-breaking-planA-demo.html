@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方案A预览 · 4.2 天平的两端（交互式）</title>
+<script src="../../vendor/echarts.min.js"></script>
+<style>
+  :root{
+    --cover-main:#1A3A4A; --cover-deep:#0F2532;
+    --gold:#F4C95D; --gold-deep:#D4A017;
+    --risk:#B84A3E; --ink:#2A2A2A; --ink-sub:#555; --ink-dim:#888;
+    --divider:rgba(26,58,74,.14); --bg:#F4F6F5;
+  }
+  *{box-sizing:border-box}
+  body{
+    font-family:"PingFang SC","Microsoft YaHei",-apple-system,BlinkMacSystemFont,sans-serif;
+    background:var(--bg); color:var(--ink); margin:0; padding:0;
+    font-size:16px; line-height:1.9;
+  }
+  .container{width:70%;max-width:1100px;margin:0 auto;padding:40px 0 80px}
+
+  /* ===== 结论置顶卡（吸顶） ===== */
+  .conclusion-card{
+    position:sticky; top:0; z-index:20;
+    margin:0 0 28px; padding:18px 26px;
+    background:linear-gradient(135deg,#1A3A4A,#0F2532);
+    border:1px solid rgba(244,201,93,.4); border-radius:10px;
+    box-shadow:0 8px 28px rgba(15,37,50,.22);
+  }
+  .conclusion-card .cc-eyebrow{
+    font-size:12px; letter-spacing:.3em; color:var(--gold);
+    margin-bottom:6px; font-weight:600;
+  }
+  .conclusion-card .cc-text{
+    font-size:18px; font-weight:700; color:#fff; line-height:1.6;
+    letter-spacing:.5px;
+  }
+  .conclusion-card .cc-text .hl{color:var(--gold)}
+  .conclusion-card .cc-sub{
+    font-size:12.5px; color:rgba(255,255,255,.6); margin-top:8px; line-height:1.7;
+  }
+
+  h2{font-size:24px;font-weight:700;color:var(--cover-main);letter-spacing:1px;margin:0 0 16px}
+  h2 .num{color:var(--gold-deep);margin-right:10px}
+
+  p.body{font-size:16px;line-height:1.9;margin-bottom:18px;text-align:justify;color:var(--ink)}
+  p.body .hl{color:var(--gold-deep);font-weight:600}
+  p.body .hl-risk{color:var(--risk);font-weight:600}
+
+  /* ===== 天平交互区 ===== */
+  .balance-wrap{
+    background:#fff; border:1px solid var(--divider); border-radius:10px;
+    padding:28px 24px 20px; margin:24px 0;
+  }
+  .balance-stage{position:relative}
+  .balance-svg{width:100%;height:360px;display:block}
+  .pan-hint{
+    font-size:12px; color:var(--ink-dim); text-align:center;
+    margin:4px 0 14px; letter-spacing:.3px;
+  }
+  .pan-hint b{color:var(--cover-main)}
+
+  /* 可点击的盘 */
+  .pan-click{cursor:pointer}
+  .pan-click:hover .pan-shape{filter:brightness(1.08)}
+  .pan-click .pan-hit{fill:transparent}
+  .reveal-anim{opacity:0;transform:translateY(-6px);transition:opacity .5s ease,transform .5s ease}
+  .reveal-anim.in{opacity:1;transform:translateY(0)}
+
+  /* 重置按钮 */
+  .reset-btn{
+    display:block; margin:8px auto 0; border:1px solid var(--divider);
+    background:#fff; color:var(--ink-sub); font-size:12px;
+    padding:5px 16px; border-radius:14px; cursor:pointer;
+    transition:all .2s; font-family:inherit;
+  }
+  .reset-btn:hover{border-color:var(--gold-deep);color:var(--gold-deep)}
+
+  .balance-caption{
+    text-align:center; font-size:13.5px; color:var(--ink-sub);
+    margin:14px 0 0; line-height:1.7;
+  }
+  .balance-caption .hl{color:var(--cover-main);font-weight:600}
+  .tag-caveat{
+    display:inline-block;font-size:11px;color:var(--ink-dim);
+    background:rgba(26,58,74,.06);padding:2px 9px;border-radius:10px;
+    margin-left:8px;letter-spacing:.3px;
+  }
+
+  /* ===== 联动双柱图 ===== */
+  .dual-bar-chart{width:100%;height:380px;margin:10px 0 0}
+
+  /* ===== 新闻配图（缩略+可放大） ===== */
+  .news-thumb{
+    margin:26px 0 0; text-align:center;
+  }
+  .news-thumb .nt-img{
+    width:200px; border-radius:6px; cursor:pointer;
+    box-shadow:0 2px 10px rgba(26,58,74,.15);
+    transition:transform .25s;
+  }
+  .news-thumb .nt-img:hover{transform:scale(1.03)}
+  .news-thumb .nt-cap{
+    font-size:11.5px; color:var(--ink-dim); margin-top:8px; line-height:1.7;
+  }
+  .lightbox{
+    display:none; position:fixed; inset:0; z-index:50;
+    background:rgba(15,37,50,.88); align-items:center; justify-content:center;
+    padding:40px; cursor:pointer;
+  }
+  .lightbox.show{display:flex}
+  .lightbox img{max-width:90%;max-height:85vh;border-radius:6px}
+  .lightbox .lb-close{
+    position:absolute; top:20px; right:28px; color:#fff; font-size:30px;
+    line-height:1; cursor:pointer;
+  }
+
+  .source-line{font-size:12px;color:var(--ink-dim);margin-top:20px;line-height:1.7}
+
+  @media(max-width:820px){
+    .container{width:92%}
+    .balance-svg{height:320px}
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- 结论置顶卡（吸顶） -->
+  <div class="conclusion-card">
+    <div class="cc-eyebrow">4.2 核心结论</div>
+    <div class="cc-text">倾斜的方向，取决于<span class="hl">有没有人教孩子怎么站</span>。</div>
+    <div class="cc-sub">机遇最大值 62.6% 与风险最大值 58.8% 几乎贴在一起——天平本身没有答案，教孩子怎么用 AI 的人，才决定了它往哪边倒。</div>
+  </div>
+
+  <h2><span class="num">4.2</span>天平的两端：62.6% 与 58.8%</h2>
+  <p class="body">2026 年 5 月，中青报面向 1336 名家长做了一次调查。同一份问卷里，家长一边说"AI 帮孩子<span class="hl">拓展了视野（62.6%）</span>、<span class="hl">激发了创造（59.8%）</span>"，一边说"AI 让孩子<span class="hl-risk">心理依赖（58.8%）</span>、<span class="hl-risk">思考能力下降（42.7%）</span>"。<span class="hl-risk">机遇的最大值与风险的最大值，几乎贴在一起</span>。</p>
+
+  <div class="balance-wrap">
+    <div class="balance-stage">
+      <svg class="balance-svg" id="balanceSvg" viewBox="0 0 600 360" xmlns="http://www.w3.org/2000/svg">
+        <!-- 立柱 -->
+        <line x1="300" y1="70" x2="300" y2="300" stroke="#1A3A4A" stroke-width="2.5"/>
+        <!-- 底座 -->
+        <rect x="268" y="300" width="64" height="8" rx="2" fill="#1A3A4A"/>
+        <line x1="282" y1="308" x2="318" y2="308" stroke="#1A3A4A" stroke-width="3"/>
+
+        <!-- 横梁组（可旋转，transform-origin 设在支点） -->
+        <g id="beamG" style="transform-origin:300px 70px; transition:transform 1s cubic-bezier(.4,0,.2,1)">
+          <!-- 横梁 -->
+          <line x1="120" y1="70" x2="480" y2="70" stroke="#1A3A4A" stroke-width="2.5"/>
+          <!-- 左盘挂绳 -->
+          <line x1="120" y1="70" x2="120" y2="110" stroke="#888" stroke-width="1"/>
+          <!-- 右盘挂绳 -->
+          <line x1="480" y1="70" x2="480" y2="110" stroke="#888" stroke-width="1"/>
+
+          <!-- 左盘（机遇/金） -->
+          <g class="pan-click" id="panLeft" data-side="opp">
+            <path class="pan-shape" d="M 78 110 Q 120 156 162 110 Z" fill="#F4C95D" opacity=".92"/>
+            <rect class="pan-hit" x="70" y="70" width="100" height="90"/>
+            <!-- 最大值常驻 -->
+            <text x="120" y="138" text-anchor="middle" font-size="22" font-weight="700" fill="#1A3A4A">62.6%</text>
+            <text x="120" y="158" text-anchor="middle" font-size="12" fill="#1A3A4A">视野拓展</text>
+            <!-- 逐项揭示 -->
+            <g class="reveal-anim" data-idx="1" style="transition-delay:.1s">
+              <text x="120" y="180" text-anchor="middle" font-size="12" fill="#555">59.8% 创造力激发</text>
+            </g>
+            <g class="reveal-anim" data-idx="2" style="transition-delay:.1s">
+              <text x="120" y="198" text-anchor="middle" font-size="12" fill="#555">49.9% 学习效率提高</text>
+            </g>
+            <g class="reveal-anim" data-idx="3" style="transition-delay:.1s">
+              <text x="120" y="216" text-anchor="middle" font-size="12" fill="#555">44.7% 学习兴趣增强</text>
+            </g>
+          </g>
+
+          <!-- 右盘（风险/暗红） -->
+          <g class="pan-click" id="panRight" data-side="risk">
+            <path class="pan-shape" d="M 438 110 Q 480 156 522 110 Z" fill="#B84A3E" opacity=".92"/>
+            <rect class="pan-hit" x="430" y="70" width="100" height="90"/>
+            <text x="480" y="138" text-anchor="middle" font-size="22" font-weight="700" fill="#fff">58.8%</text>
+            <text x="480" y="158" text-anchor="middle" font-size="12" fill="#fff">心理依赖</text>
+            <g class="reveal-anim" data-idx="1" style="transition-delay:.1s">
+              <text x="480" y="180" text-anchor="middle" font-size="12" fill="#1A3A4A">42.7% 独立思考下降</text>
+            </g>
+            <g class="reveal-anim" data-idx="2" style="transition-delay:.1s">
+              <text x="480" y="198" text-anchor="middle" font-size="12" fill="#1A3A4A">42.7% 人际互动减少</text>
+            </g>
+            <g class="reveal-anim" data-idx="3" style="transition-delay:.1s">
+              <text x="480" y="216" text-anchor="middle" font-size="12" fill="#1A3A4A">39.1% 不良不实内容</text>
+            </g>
+            <g class="reveal-anim" data-idx="4" style="transition-delay:.1s">
+              <text x="480" y="234" text-anchor="middle" font-size="12" fill="#1A3A4A">30.8% 沉迷娱乐</text>
+            </g>
+          </g>
+        </g>
+
+        <!-- 支点（在横梁之上） -->
+        <polygon points="300,60 314,76 286,76" fill="#1A3A4A"/>
+      </svg>
+    </div>
+
+    <p class="pan-hint">点击 <b>左盘</b> 逐项展开机遇 · 点击 <b>右盘</b> 逐项展开风险 · 横梁随展开重量实时倾斜</p>
+    <button class="reset-btn" id="resetBtn">重置天平</button>
+
+    <p class="balance-caption">展开全部后，机遇总重 217.0% 与风险总重 214.1% 几乎打平——<span class="hl">天平没有答案，教的人才有</span>。<span class="tag-caveat">口径：家长主观感受，各项可并列不可相加</span></p>
+
+    <div id="dualBarChart" class="dual-bar-chart"></div>
+  </div>
+
+  <p class="body">Common Sense Media 2026 年 6 月那份报告把硬币翻了另一面：即便在最常使用 AI 陪伴的青少年里，<span class="hl">80% 仍把真人友谊放在第一位</span>；38% 的 AI 用户说，他们"把练到的社交技能用回了现实"。<span class="hl">光不是没有，只是不会自己落下来</span>。</p>
+
+  <!-- 新闻配图：缩略图 + 灯箱放大，不再抢结论视觉中心 -->
+  <div class="news-thumb">
+    <img class="nt-img" id="newsImg" src="../../assets/images/news/fig07-leftbehind-people-visual.webp" alt="湖北巴东县暑期爱心托管班，老师带着孩子们与AI机器人互动" loading="lazy">
+    <p class="nt-cap">图7：2026年8月10日，湖北巴东县信陵镇青年之家暑期爱心托管班，老师带孩子们与AI机器人互动（焦国斌 摄，人民视觉）</p>
+  </div>
+
+  <p class="body">北京安定医院儿童精神医学首席专家郑毅的临床观察更深一层：<span class="hl-risk">"AI 沉迷往往是'果'而不是'因'——先有焦虑、抑郁、社交困境，才有 AI 填补。"</span>把 AI 拿走，伤口还在。这也是为什么"禁用"这一派政策在临床医生那里，从未获得过支持。</p>
+
+  <p class="source-line">
+    来源：中青报 2026-05-27 · Common Sense Media 2026-06 · 孙宏艳《人民教育》2026-10 · 郑毅 2026-08-29
+  </p>
+</div>
+
+<!-- 灯箱 -->
+<div class="lightbox" id="lightbox">
+  <span class="lb-close">×</span>
+  <img src="../../assets/images/news/fig07-leftbehind-people-visual.webp" alt="">
+</div>
+
+<script>
+/* ===== 数据 ===== */
+const OPP = [
+  {label:'视野拓展', value:62.6},
+  {label:'创造力激发', value:59.8},
+  {label:'学习效率提高', value:49.9},
+  {label:'学习兴趣增强', value:44.7}
+];
+const RISK = [
+  {label:'心理依赖', value:58.8},
+  {label:'独立思考下降', value:42.7},
+  {label:'人际互动减少', value:42.7},
+  {label:'不良不实内容', value:39.1},
+  {label:'沉迷娱乐', value:30.8}
+];
+
+/* ===== 天平交互 ===== */
+const beamG = document.getElementById('beamG');
+const panLeft = document.getElementById('panLeft');
+const panRight = document.getElementById('panRight');
+const resetBtn = document.getElementById('resetBtn');
+
+let oppRevealed = 0; // 已揭示的机遇项数（不含常驻最大值）
+let riskRevealed = 0;
+
+// 总重 = 所有值之和（最大值常驻也算入）
+function sumRevealed(){
+  let oppSum = OPP[0].value; // 最大值常驻
+  for(let i=1;i<=oppRevealed;i++) oppSum += OPP[i].value;
+  let riskSum = RISK[0].value;
+  for(let i=1;i<=riskRevealed;i++) riskSum += RISK[i].value;
+  return {oppSum, riskSum};
+}
+
+function updateTilt(){
+  const {oppSum, riskSum} = sumRevealed();
+  // 角度：机遇偏重 -> 横梁左端下沉 -> 负角度（顺时针为正）
+  // 差值范围：全部揭示后 opp 217 vs risk 214，差 3；单侧全揭示最大差约 158
+  const diff = oppSum - riskSum;
+  const angle = Math.max(-12, Math.min(12, diff * 0.18));
+  beamG.style.transform = `rotate(${angle}deg)`;
+}
+
+function revealItem(side){
+  if(side==='opp'){
+    if(oppRevealed >= OPP.length-1) return;
+    oppRevealed++;
+    const el = panLeft.querySelector(`.reveal-anim[data-idx="${oppRevealed}"]`);
+    if(el) el.classList.add('in');
+  } else {
+    if(riskRevealed >= RISK.length-1) return;
+    riskRevealed++;
+    const el = panRight.querySelector(`.reveal-anim[data-idx="${riskRevealed}"]`);
+    if(el) el.classList.add('in');
+  }
+  updateTilt();
+  syncChart();
+}
+
+panLeft.addEventListener('click', ()=>revealItem('opp'));
+panRight.addEventListener('click', ()=>revealItem('risk'));
+
+resetBtn.addEventListener('click', ()=>{
+  oppRevealed = 0; riskRevealed = 0;
+  document.querySelectorAll('.reveal-anim').forEach(el=>el.classList.remove('in'));
+  updateTilt();
+  syncChart();
+});
+
+/* ===== 双柱图 ===== */
+const chart = echarts.init(document.getElementById('dualBarChart'));
+const allLabels = OPP.map(d=>d.label).concat(RISK.map(d=>d.label));
+const oppData = OPP.map(d=>d.value).concat(RISK.map(()=>0));
+const riskData = OPP.map(()=>0).concat(RISK.map(d=>d.value));
+
+let highlightIdx = -1;
+
+function buildOption(){
+  return {
+    backgroundColor:'transparent',
+    grid:{left:110, right:30, top:30, bottom:50},
+    tooltip:{trigger:'axis', axisPointer:{type:'shadow'}},
+    legend:{data:['机遇（家长认可）','风险（家长担忧）'], top:0, textStyle:{color:'#555', fontSize:12}},
+    xAxis:{type:'value', max:70, axisLine:{show:false},
+      axisLabel:{color:'#888', formatter:'{value}%'},
+      splitLine:{lineStyle:{color:'rgba(26,58,74,.08)'}}},
+    yAxis:{type:'category', data:allLabels, axisLine:{show:false}, axisTick:{show:false},
+      axisLabel:{color:'#2A2A2A', fontSize:12}},
+    series:[
+      {name:'机遇（家长认可）', type:'bar', data:oppData,
+        itemStyle:{color:p=> p.dataIndex===highlightIdx ? '#D4A017' : 'rgba(212,160,23,.35)',
+          borderRadius:[0,4,4,0]},
+        label:{show:true, position:'right', formatter:'{c}%', color:'#D4A017', fontSize:11, fontWeight:600}},
+      {name:'风险（家长担忧）', type:'bar', data:riskData,
+        itemStyle:{color:p=> p.dataIndex===highlightIdx ? '#B84A3E' : 'rgba(184,74,62,.35)',
+          borderRadius:[0,4,4,0]},
+        label:{show:true, position:'right', formatter:'{c}%', color:'#B84A3E', fontSize:11, fontWeight:600}}
+    ]
+  };
+}
+chart.setOption(buildOption());
+
+chart.on('mouseover', params=>{
+  if(params.componentType==='series'){
+    highlightIdx = params.dataIndex;
+    chart.setOption(buildOption());
+  }
+});
+chart.on('mouseout', ()=>{
+  highlightIdx = -1;
+  chart.setOption(buildOption());
+});
+
+// 天平揭示项与图表高亮联动
+function syncChart(){
+  // 当前揭示到的机遇项索引（0-based）= oppRevealed，风险项索引 = 4 + riskRevealed
+  // 高亮最新揭示的那一项
+  if(oppRevealed>0){ highlightIdx = oppRevealed; chart.setOption(buildOption()); }
+  else if(riskRevealed>0){ highlightIdx = 4 + riskRevealed; chart.setOption(buildOption()); }
+  else { highlightIdx = -1; chart.setOption(buildOption()); }
+}
+
+/* ===== 灯箱 ===== */
+const lightbox = document.getElementById('lightbox');
+const newsImg = document.getElementById('newsImg');
+newsImg.addEventListener('click', ()=>lightbox.classList.add('show'));
+lightbox.addEventListener('click', ()=>lightbox.classList.remove('show'));
+
+window.addEventListener('resize', ()=>chart.resize());
+</script>
+</body>
+</html>
